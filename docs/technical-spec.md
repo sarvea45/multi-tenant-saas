@@ -97,7 +97,7 @@ Critical variables are injected via `docker-compose.yml`:
 #### Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/multi-tenant-saas.git
+git clone https://github.com/sarvea45/multi-tenant-saas.git
 cd multi-tenant-saas
 ```
 
