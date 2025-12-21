@@ -1,11 +1,12 @@
 const db = require('../config/db');
+const { logAction } = require('../services/auditService');
 
 // API 16: Create Task
 exports.createTask = async (req, res) => {
   try {
-    const { projectId } = req.params; // from URL
+    const { projectId } = req.params;
     const { title, status, priority, assignedTo, dueDate } = req.body;
-    const { tenantId } = req.user;
+    const { tenantId, id: userId } = req.user;
 
     // Verify Project Ownership
     const projCheck = await db.query('SELECT id FROM projects WHERE id=$1 AND tenant_id=$2', [projectId, tenantId]);
@@ -16,6 +17,9 @@ exports.createTask = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [projectId, tenantId, title, status||'todo', priority||'medium', assignedTo, dueDate]
     );
+    
+    await logAction(tenantId, userId, 'CREATE_TASK', 'task', result.rows[0].id);
+    
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) { res.status(500).json({ message: 'Server Error' }); }
 };
@@ -39,13 +43,16 @@ exports.updateTaskStatus = async (req, res) => {
   try {
     const { taskId } = req.params;
     const { status } = req.body;
-    const { tenantId } = req.user;
+    const { tenantId, id: userId } = req.user;
 
     const result = await db.query(
       'UPDATE tasks SET status = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *',
       [status, taskId, tenantId]
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Task not found' });
+    
+    await logAction(tenantId, userId, 'UPDATE_TASK_STATUS', 'task', taskId);
+
     res.status(200).json({ success: true, data: result.rows[0] });
   } catch (error) { res.status(500).json({ message: 'Server Error' }); }
 };
@@ -55,7 +62,7 @@ exports.updateTask = async (req, res) => {
   try {
     const { taskId } = req.params;
     const { title, description, status, priority, assignedTo, dueDate } = req.body;
-    const { tenantId } = req.user;
+    const { tenantId, id: userId } = req.user;
 
     const result = await db.query(
       `UPDATE tasks SET title=COALESCE($1,title), description=COALESCE($2,description), 
@@ -65,6 +72,9 @@ exports.updateTask = async (req, res) => {
       [title, description, status, priority, assignedTo, dueDate, taskId, tenantId]
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Task not found' });
+    
+    await logAction(tenantId, userId, 'UPDATE_TASK', 'task', taskId);
+
     res.status(200).json({ success: true, data: result.rows[0] });
   } catch (error) { res.status(500).json({ message: 'Server Error' }); }
 };
