@@ -1,22 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { createProject, getProjects } = require('../controllers/projectController');
-const { createTask, getTasks } = require('../controllers/taskController');
+const { createProject, getProjects, updateProject, deleteProject } = require('../controllers/projectController');
 const { protect } = require('../middleware/authMiddleware');
 
-// All routes here are protected by JWT
 router.use(protect);
 
-// Project Endpoints
-// URL: /api/projects
 router.route('/')
-  .get(getProjects)
-  .post(createProject);
+  .get(getProjects)     // API 13
+  .post(createProject); // API 12
 
-// Task Endpoints (Nested under projects)
-// URL: /api/projects/:projectId/tasks
-router.route('/:projectId/tasks')
-  .post(createTask)
-  .get(getTasks);
+router.route('/:projectId')
+  .put(updateProject)   // API 14
+  .delete(deleteProject); // API 15
 
 module.exports = router;
