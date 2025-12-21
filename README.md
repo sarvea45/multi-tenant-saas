@@ -27,7 +27,7 @@ A production-ready, Dockerized SaaS application for Project & Task Management. T
 | Role | Subdomain | Email | Password |
 | :--- | :--- | :--- | :--- |
 | **Tenant Admin** | `demo` | `admin@demo.com` | `Demo@123` |
-| **Super Admin** | N/A | `superadmin@system.com` | `Admin@123` |
+| **Super Admin** | system| `superadmin@system.com` | `Admin@123` |
 | **Regular User** | `demo` | `user1@demo.com` | `User@123` |
 
 ## 📂 Project Structure
