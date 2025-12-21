@@ -5,7 +5,8 @@ const db = require('./config/db');
 
 // Import Routes
 const authRoutes = require('./routes/authRoutes');
-const projectRoutes = require('./routes/projectRoutes'); // <--- NEW IMPORT
+const projectRoutes = require('./routes/projectRoutes');
+const userRoutes = require('./routes/userRoutes'); // <--- NEW IMPORT
 
 dotenv.config();
 
@@ -14,7 +15,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Health Check (MANDATORY)
+// Health Check
 app.get('/api/health', async (req, res) => {
   try {
     await db.query('SELECT 1');
@@ -27,7 +28,8 @@ app.get('/api/health', async (req, res) => {
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/projects', projectRoutes); // <--- NEW ROUTE
+app.use('/api/projects', projectRoutes);
+app.use('/api/users', userRoutes); // <--- NEW ROUTE MOUNT
 
 // Global Error Handler
 app.use((err, req, res, next) => {
