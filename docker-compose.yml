@@ -1,6 +1,9 @@
 version: '3.8'
 
 services:
+  # ---------------------------------------------------------------------------
+  # Database Service (PostgreSQL)
+  # ---------------------------------------------------------------------------
   database:
     image: postgres:15
     container_name: database
@@ -12,13 +15,13 @@ services:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
-      # Mount Migrations in order
+      # Mount Migrations in Order (Critical for Task 5.2.2)
       - ./database/migrations/001_create_tenants.sql:/docker-entrypoint-initdb.d/001_create_tenants.sql
       - ./database/migrations/002_create_users.sql:/docker-entrypoint-initdb.d/002_create_users.sql
       - ./database/migrations/003_create_projects.sql:/docker-entrypoint-initdb.d/003_create_projects.sql
       - ./database/migrations/004_create_tasks.sql:/docker-entrypoint-initdb.d/004_create_tasks.sql
       - ./database/migrations/005_create_audit_logs.sql:/docker-entrypoint-initdb.d/005_create_audit_logs.sql
-      # Mount Seeds last
+      # Mount Seeds Last
       - ./database/seeds/seed_data.sql:/docker-entrypoint-initdb.d/999_seed_data.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -26,6 +29,9 @@ services:
       timeout: 5s
       retries: 5
 
+  # ---------------------------------------------------------------------------
+  # Backend API Service
+  # ---------------------------------------------------------------------------
   backend:
     build: ./backend
     container_name: backend
@@ -40,19 +46,34 @@ services:
       - DB_PASSWORD=postgres
       - JWT_SECRET=super_secret_key_must_be_long_12345
       - JWT_EXPIRES_IN=24h
-      - FRONTEND_URL=http://frontend:3000
+      # CORS: Must match what the browser uses to access the site
+      - FRONTEND_URL=http://localhost:3000
     depends_on:
       database:
         condition: service_healthy
+    # MANDATORY: Backend Healthcheck for Evaluation Script
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ---------------------------------------------------------------------------
+  # Frontend Service (React)
+  # ---------------------------------------------------------------------------
   frontend:
     build: ./frontend
     container_name: frontend
     ports:
       - "3000:3000"
     environment:
+      # Browser needs localhost to hit the API from your machine
       - REACT_APP_API_URL=http://localhost:5000/api
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     stdin_open: true
+
+# MANDATORY: Define the volume for persistent database storage
+volumes:
+  db_data:

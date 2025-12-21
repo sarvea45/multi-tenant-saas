@@ -1,6 +1,6 @@
 -- 1. Super Admin
 INSERT INTO users (id, tenant_id, email, password_hash, full_name, role) VALUES 
-(uuid_generate_v4(), NULL, 'superadmin@system.com', '$2b$10$REPLACE_WITH_HASH_FOR_Admin@123', 'System Super Admin', 'super_admin');
+(uuid_generate_v4(), NULL, 'superadmin@system.com', '$2b$10$X.on0YHL7Gg4aKB8.4d7O.ld.JlkzjPNDVVQYuPJv3cdEVaXVXBoK', 'System Super Admin', 'super_admin');
 
 -- 2. Demo Tenant
 INSERT INTO tenants (id, name, subdomain, status, subscription_plan, max_users, max_projects) VALUES 
@@ -8,12 +8,12 @@ INSERT INTO tenants (id, name, subdomain, status, subscription_plan, max_users, 
 
 -- 3. Tenant Admin
 INSERT INTO users (id, tenant_id, email, password_hash, full_name, role) VALUES 
-('b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'admin@demo.com', '$2b$10$REPLACE_WITH_HASH_FOR_Demo@123', 'Demo Admin', 'tenant_admin');
+('b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'admin@demo.com', '$2b$10$2PuJpw5TQmLUP7hKaCgGpetKETN/mjONuLGW9RZHui5U4T1u/wNe.', 'Demo Admin', 'tenant_admin');
 
 -- 4. Regular Users
 INSERT INTO users (tenant_id, email, password_hash, full_name, role) VALUES 
-('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'user1@demo.com', '$2b$10$REPLACE_WITH_HASH_FOR_User@123', 'User One', 'user'),
-('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'user2@demo.com', '$2b$10$REPLACE_WITH_HASH_FOR_User@123', 'User Two', 'user');
+('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'user1@demo.com', '$2b$10$.pPb54kkbhiKvtTVx1eKSuaxNDEPt9vf2uDKNOeQWtyEjusQ68UZ2', 'User One', 'user'),
+('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'user2@demo.com', '$2b$10$.pPb54kkbhiKvtTVx1eKSuaxNDEPt9vf2uDKNOeQWtyEjusQ68UZ2', 'User Two', 'user');
 
 -- 5. Projects
 INSERT INTO projects (id, tenant_id, name, description, status, created_by) VALUES 

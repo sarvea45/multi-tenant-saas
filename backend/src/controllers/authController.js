@@ -4,9 +4,11 @@ const jwt = require('jsonwebtoken');
 const { logAction } = require('../services/auditService');
 
 // API 1: Tenant Registration
-// Requirement: Transaction, Hash Password, Default Plan
+// Requirement: Transaction, Hash Password, Default Plan, Audit Log
 exports.registerTenant = async (req, res) => {
+  // Get a dedicated client for transaction
   const client = await db.getClient();
+  
   try {
     await client.query('BEGIN');
     
@@ -15,7 +17,8 @@ exports.registerTenant = async (req, res) => {
     // 1. Create Tenant (Default: 'free' plan, 'active' status)
     const tenantRes = await client.query(
       `INSERT INTO tenants (name, subdomain, status, subscription_plan, max_users, max_projects) 
-       VALUES ($1, $2, 'active', 'free', 5, 3) RETURNING id`,
+       VALUES ($1, $2, 'active', 'free', 5, 3) 
+       RETURNING id`,
       [tenantName, subdomain]
     );
     const tenantId = tenantRes.rows[0].id;
@@ -31,12 +34,13 @@ exports.registerTenant = async (req, res) => {
        RETURNING id, email, full_name, role`,
       [tenantId, adminEmail, hashedPassword, adminFullName]
     );
+    const userId = userRes.rows[0].id;
 
-    // 4. Audit Log (Inside transaction)
+    // 4. Audit Log (Manually inserting inside transaction to ensure atomicity)
     await client.query(
       `INSERT INTO audit_logs (tenant_id, user_id, action, entity_type, entity_id)
        VALUES ($1, $2, 'REGISTER_TENANT', 'tenant', $3)`,
-      [tenantId, userRes.rows[0].id, tenantId]
+      [tenantId, userId, tenantId]
     );
 
     await client.query('COMMIT');
@@ -52,11 +56,11 @@ exports.registerTenant = async (req, res) => {
     });
   } catch (error) {
     await client.query('ROLLBACK');
-    // Requirement: 409 for duplicate subdomain/email
+    // Handle Duplicate Key Error (Postgres code 23505)
     if (error.code === '23505') { 
         return res.status(409).json({ success: false, message: 'Subdomain or Email already exists' });
     }
-    console.error(error);
+    console.error('Registration Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   } finally {
     client.release();
@@ -64,12 +68,12 @@ exports.registerTenant = async (req, res) => {
 };
 
 // API 2: User Login
-// Requirement: Verify tenant status, user status, password match
+// Requirement: Verify tenant status, user status, password match, JWT
 exports.login = async (req, res) => {
   const { email, password, tenantSubdomain } = req.body;
   
   try {
-    // Join Users and Tenants to check statuses
+    // 1. Fetch User with Tenant Details
     const query = `
       SELECT u.*, t.subdomain, t.status as tenant_status
       FROM users u 
@@ -84,31 +88,33 @@ exports.login = async (req, res) => {
     
     const user = result.rows[0];
 
-    // Requirement: Verify user belongs to tenant (skip for super_admin)
+    // 2. Validation Logic
+    // Skip subdomain check for super_admin (they can login anywhere technically, or usually have a specific portal)
     if (user.role !== 'super_admin') {
+       // Check if user belongs to the requested subdomain
        if (user.subdomain !== tenantSubdomain) {
          return res.status(404).json({ success: false, message: 'Tenant not found or user does not belong to it' });
        }
-       // Requirement: 403 Account suspended/inactive
+       // Check if account/tenant is active
        if (user.tenant_status !== 'active' || !user.is_active) {
          return res.status(403).json({ success: false, message: 'Account suspended or inactive' });
        }
     }
 
-    // Requirement: Verify password hash
+    // 3. Verify Password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Generate Token
+    // 4. Generate JWT Token
     const token = jwt.sign(
       { userId: user.id, tenantId: user.tenant_id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
 
-    // Optional: Log successful login
+    // 5. Log Action
     await logAction(user.tenant_id, user.id, 'LOGIN', 'session', null);
 
     res.status(200).json({
@@ -122,33 +128,48 @@ exports.login = async (req, res) => {
           tenantId: user.tenant_id 
         },
         token,
-        expiresIn: 86400
+        expiresIn: 86400 // 24 hours in seconds
       }
     });
   } catch (error) {
-    console.error(error);
+    console.error('Login Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
 // API 3: Get Current User
-// Requirement: Return user + tenant info, NO password hash
+// Requirement: Return user info + tenant info + Dashboard Stats
 exports.getMe = async (req, res) => {
   try {
-    const userRes = await db.query(
-        `SELECT u.id, u.email, u.full_name, u.role, u.tenant_id, u.is_active,
-                t.id as t_id, t.name, t.subdomain, t.subscription_plan, t.max_users, t.max_projects
-         FROM users u
-         LEFT JOIN tenants t ON u.tenant_id = t.id
-         WHERE u.id = $1`, 
-        [req.user.userId]
-    );
+    // 1. Fetch User and Tenant Info
+    const userQuery = `
+      SELECT u.id, u.email, u.full_name, u.role, u.tenant_id, u.is_active,
+             t.id as t_id, t.name, t.subdomain, t.subscription_plan, t.max_users, t.max_projects
+      FROM users u
+      LEFT JOIN tenants t ON u.tenant_id = t.id
+      WHERE u.id = $1`;
+      
+    const userRes = await db.query(userQuery, [req.user.userId]);
     
-    if (userRes.rows.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
+    if (userRes.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+    }
     
     const row = userRes.rows[0];
+
+    // 2. Fetch Dashboard Stats (Counts)
+    // This fixes the "counts showing 0" issue on the frontend
+    let stats = { totalProjects: 0, totalTasks: 0 };
     
-    // Structure response exactly as requested
+    if (row.tenant_id) {
+        const projectCount = await db.query('SELECT COUNT(*) FROM projects WHERE tenant_id = $1', [row.tenant_id]);
+        const taskCount = await db.query('SELECT COUNT(*) FROM tasks WHERE tenant_id = $1', [row.tenant_id]);
+        
+        stats.totalProjects = parseInt(projectCount.rows[0].count);
+        stats.totalTasks = parseInt(taskCount.rows[0].count);
+    }
+
+    // 3. Construct Response
     const data = {
         id: row.id,
         email: row.email,
@@ -161,27 +182,32 @@ exports.getMe = async (req, res) => {
             subdomain: row.subdomain,
             subscriptionPlan: row.subscription_plan,
             maxUsers: row.max_users,
-            maxProjects: row.max_projects
+            maxProjects: row.max_projects,
+            stats: stats // <--- Added Stats here
         }
     };
 
     res.status(200).json({ success: true, data });
   } catch (error) {
+    console.error('GetMe Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
 // API 4: Logout
-// Requirement: Log action in audit_logs
+// Requirement: Log action
 exports.logout = async (req, res) => {
   try {
     const { tenantId, userId } = req.user;
     
     // Log the logout action
-    await logAction(tenantId, userId, 'LOGOUT', 'user', userId);
+    if (tenantId && userId) {
+        await logAction(tenantId, userId, 'LOGOUT', 'user', userId);
+    }
 
     res.status(200).json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
+    console.error('Logout Error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
