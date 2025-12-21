@@ -1,4 +1,4 @@
-git remote add origin https://github.com/sarvea45/multi-tenant-saas.gitconst jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken');
 
 const protect = (req, res, next) => {
   let token;
