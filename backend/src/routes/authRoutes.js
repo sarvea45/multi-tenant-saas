@@ -10,3 +10,4 @@ router.get('/me', protect, getMe);                                 // API 3
 router.post('/logout', protect, logout);                           // API 4
 
 module.exports = router;
+//authroutes.js
