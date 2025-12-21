@@ -11,10 +11,18 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - db_data:/var/lib/postgresql/data
+      # Mount Migrations in order
+      - ./database/migrations/001_create_tenants.sql:/docker-entrypoint-initdb.d/001_create_tenants.sql
+      - ./database/migrations/002_create_users.sql:/docker-entrypoint-initdb.d/002_create_users.sql
+      - ./database/migrations/003_create_projects.sql:/docker-entrypoint-initdb.d/003_create_projects.sql
+      - ./database/migrations/004_create_tasks.sql:/docker-entrypoint-initdb.d/004_create_tasks.sql
+      - ./database/migrations/005_create_audit_logs.sql:/docker-entrypoint-initdb.d/005_create_audit_logs.sql
+      # Mount Seeds last
+      - ./database/seeds/seed_data.sql:/docker-entrypoint-initdb.d/999_seed_data.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
 
