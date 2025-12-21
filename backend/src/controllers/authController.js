@@ -89,7 +89,7 @@ exports.login = async (req, res) => {
     const user = result.rows[0];
 
     // 2. Validation Logic
-    // Skip subdomain check for super_admin (they can login anywhere technically, or usually have a specific portal)
+    // Skip subdomain check for super_admin (they can login anywhere)
     if (user.role !== 'super_admin') {
        // Check if user belongs to the requested subdomain
        if (user.subdomain !== tenantSubdomain) {
@@ -115,7 +115,9 @@ exports.login = async (req, res) => {
     );
 
     // 5. Log Action
-    await logAction(user.tenant_id, user.id, 'LOGIN', 'session', null);
+    if (user.tenant_id) {
+        await logAction(user.tenant_id, user.id, 'LOGIN', 'session', null);
+    }
 
     res.status(200).json({
       success: true,
@@ -138,7 +140,7 @@ exports.login = async (req, res) => {
 };
 
 // API 3: Get Current User
-// Requirement: Return user info + tenant info + Dashboard Stats
+// Requirement: Return user info + tenant info + Dashboard Stats (Fix applied for Super Admin)
 exports.getMe = async (req, res) => {
   try {
     // 1. Fetch User and Tenant Info
@@ -157,11 +159,18 @@ exports.getMe = async (req, res) => {
     
     const row = userRes.rows[0];
 
-    // 2. Fetch Dashboard Stats (Counts)
-    // This fixes the "counts showing 0" issue on the frontend
+    // 2. Fetch Dashboard Stats
     let stats = { totalProjects: 0, totalTasks: 0 };
     
-    if (row.tenant_id) {
+    if (row.role === 'super_admin') {
+        // --- SUPER ADMIN: Count EVERYTHING ---
+        const projectCount = await db.query('SELECT COUNT(*) FROM projects');
+        const taskCount = await db.query('SELECT COUNT(*) FROM tasks');
+        
+        stats.totalProjects = parseInt(projectCount.rows[0].count);
+        stats.totalTasks = parseInt(taskCount.rows[0].count);
+    } else if (row.tenant_id) {
+        // --- TENANT USER: Count only OWN tenant data ---
         const projectCount = await db.query('SELECT COUNT(*) FROM projects WHERE tenant_id = $1', [row.tenant_id]);
         const taskCount = await db.query('SELECT COUNT(*) FROM tasks WHERE tenant_id = $1', [row.tenant_id]);
         
@@ -177,13 +186,14 @@ exports.getMe = async (req, res) => {
         role: row.role,
         isActive: row.is_active,
         tenant: {
-            id: row.t_id,
-            name: row.name,
-            subdomain: row.subdomain,
-            subscriptionPlan: row.subscription_plan,
-            maxUsers: row.max_users,
-            maxProjects: row.max_projects,
-            stats: stats // <--- Added Stats here
+            // Handle null tenant for Super Admin
+            id: row.t_id || null,
+            name: row.name || 'System',
+            subdomain: row.subdomain || 'system',
+            subscriptionPlan: row.subscription_plan || 'unlimited',
+            maxUsers: row.max_users || 0,
+            maxProjects: row.max_projects || 0,
+            stats: stats 
         }
     };
 
@@ -200,7 +210,7 @@ exports.logout = async (req, res) => {
   try {
     const { tenantId, userId } = req.user;
     
-    // Log the logout action
+    // Log the logout action (only if part of a tenant)
     if (tenantId && userId) {
         await logAction(tenantId, userId, 'LOGOUT', 'user', userId);
     }
